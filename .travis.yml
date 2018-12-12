@@ -1,28 +1,3 @@
 language: r
+r: bioc-release
 
-r: 3.2
-warnings_are_errors: false
-sudo: false
-cache: packages
-
-r_packages:
-  - knitrBootstrap
-  - covr
-  - RColorBrewer
-  - gplots
-  - optparse
-  - logging
-
-r_check_args: "--timings"
-
-after_sucess:
-  - Rscript -e 'library(covr); covr::codecov()'
-
-notifications:
-  email:
-    on_success: always
-    on_failure: always
-
-env:
- global:
-   _ _R_CHECK_TIMINGS_="0"

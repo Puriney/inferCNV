@@ -1,0 +1,18 @@
+citHeader("To cite the inferCNV package in publications, please use:")
+
+citEntry(entry = "article", 
+	title = "",
+	author = personList(
+		person(),
+		person()
+	),
+	journal = "",
+	year = "2018",
+	volume = "",
+	pages = "",
+	textVersion = paste("authors", "title", "journal")
+)
+
+
+
+

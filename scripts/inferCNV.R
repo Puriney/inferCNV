@@ -7,6 +7,9 @@ library("RColorBrewer", character.only=TRUE)
 library(GMD)
 library(optparse)
 library(logging)
+if (!require('fastcluster')) {
+    warning("fastcluster library not available, using the default hclust method instead.")
+}
 library(infercnv)
 
 # Logging level choices
@@ -20,9 +23,9 @@ CHR = "chr"
 START = "start"
 STOP = "stop"
 
-logging::basicConfig(level='INFO') #initialize to info setting.  
+logging::basicConfig(level='INFO') #initialize to info setting.
 
-#' Check arguments and make sure the user input meet certain 
+#' Check arguments and make sure the user input meet certain
 #' additional requirements.
 #'
 #' Args:
@@ -58,7 +61,7 @@ check_arguments <- function(arguments){
                                 collapse=",", sep=""))
         stop("error, not recognizing log level")
     }
-    
+
     # Require the visualization outlier detection to be a correct choice.
     if (!(arguments$bound_method_vis %in% C_VIS_OUTLIER_CHOICES)){
         logging::logerror(paste(":: --vis_bound_method: Please use a method ",
@@ -79,7 +82,7 @@ check_arguments <- function(arguments){
                                 paste(C_HCLUST_METHODS, collapse=","), sep="") )
         stop("error, must specify acceptable --hclust_method")
     }
-        
+
     # Warn that an average of the samples is used in the absence of
     # normal / reference samples
     if (is.null(arguments$reference_observations)){
@@ -106,47 +109,57 @@ check_arguments <- function(arguments){
         stop(980)
     }
 
-    if (! is.na(suppressWarnings(as.integer(arguments$num_groups)))){
-        arguments$num_groups <- list(as.integer(arguments$num_groups))
-    } else {
+    # if (! is.na(suppressWarnings(as.integer(arguments$name_ref_groups)))){
+    #     arguments$name_ref_groups <- list(as.integer(arguments$name_ref_groups))
+    # } else {
+    if (! is.na(arguments$name_ref_groups)) {
         # Warn references must be given.
         if (is.null(arguments$reference_observations)){
             logging::logerror(paste(":: --ref_groups to use this function ",
                                     "references must be given. "))
+            stop(979)
         }
 
         # TODO need to check and make sure all reference indices are given.
-        num_str <- unlist(strsplit(arguments$num_groups,","))
-        if (length(num_str) == 1){
-            logging::logerror(paste(":: --ref_groups. If explicitly giving ",
-                                    "indices, make sure to give atleast ",
-                                    "two groups", sep =""))
-            stop(990)
-        }
+        arguments$name_ref_groups <- unlist(strsplit(arguments$name_ref_groups,","))
+        # if (length(num_str) == 1){
+        #     logging::logerror(paste(":: --ref_groups. If explicitly giving ",
+        #                             "indices, make sure to give atleast ",
+        #                             "two groups", sep =""))
+        #     stop(990)
+        # }
 
-        num_groups <- list()
-        for (num_token in num_str){
-            token_numbers <- unlist(strsplit(num_token, ":"))
-            number_count <- length(token_numbers)
-            if (number_count == 1){
-                singleton <- as.integer(number_count)
-                num_groups[[length(num_groups) + 1]] <- singleton
-            } else if (number_count == 2){
-                from <- as.integer(token_numbers[1])
-                to <- as.integer(token_numbers[2])
-                num_groups[[length(num_groups) + 1]] <- seq(from, to)
-            } else {
-                logging::logerror(paste(":: --ref_groups is expecting either ",
-                                        "one number or a comma delimited list ",
-                                        "of numbers or spans using ':'. ",
-                                        "Examples include: --ref_groups 3 or ",
-                                        " --ref_groups 1,3,5,6,3 or ",
-                                        " --ref_groups 1:5,6:20 or ",
-                                        " --ref_groups 1,2:5,6,7:10 .", sep=""))
-                stop(999)
-            }
+        # name_ref_groups <- list()
+        # for (name_token in name_str){
+        #     # token_numbers <- unlist(strsplit(num_token, ":"))
+        #     # number_count <- length(token_numbers)
+        #     if (number_count == 1){
+        #         singleton <- as.integer(number_count)
+        #         name_ref_groups[[length(name_ref_groups) + 1]] <- singleton
+        #     } else if (number_count == 2){
+        #         from <- as.integer(token_numbers[1])
+        #         to <- as.integer(token_numbers[2])
+        #         name_ref_groups[[length(name_ref_groups) + 1]] <- seq(from, to)
+        #     } else {
+        #         logging::logerror(paste(":: --ref_groups is expecting either ",
+        #                                 "one number or a comma delimited list ",
+        #                                 "of numbers or spans using ':'. ",
+        #                                 "Examples include: --ref_groups 3 or ",
+        #                                 " --ref_groups 1,3,5,6,3 or ",
+        #                                 " --ref_groups 1:5,6:20 or ",
+        #                                 " --ref_groups 1,2:5,6,7:10 .", sep=""))
+        #         stop(999)
+        #     }
+        # }
+        # arguments$name_ref_groups <- name_ref_groups
+    }
+    else {
+        if(!is.null(arguments$num_ref_groups)) {
+            logging::logerror(paste("::  cannot use --num_ref_groups without",
+                                    "using --ref_groups as the average of all",
+                                    "cells is used."))
+            stop(978)
         }
-        arguments$num_groups <- num_groups
     }
     return(arguments)
 }
@@ -277,22 +290,32 @@ pargs <- optparse::add_option(pargs, c("--ref"),
                               dest="reference_observations",
                               metavar="Input_reference_observations",
                               help=paste("Tab delimited characters are expected.",
-                                         "Names of the subset of samples ( data's",
-                                         "columns ) that should be used as",
-                                         "references if not given, the average of",
-                                         "all samples will be the reference.",
+                                         "Names of the subset each sample ( data's",
+                                         "columns ) is part of.",
+                                         "[Default %default]"))
+
+pargs <- optparse::add_option(pargs, c("--num_ref_groups"),
+                              type="integer",
+                              default=NULL,
+                              action="store",
+                              dest="num_ref_groups",
+                              metavar="Number_of_reference_groups",
+                              help=paste("Define a number of groups to",
+                                         "make automatically by unsupervised",
+                                         "clustering. This ignores annotations",
+                                         "within references, but does not",
+                                         "mix them with observations.",
                                          "[Default %default]"))
 
 pargs <- optparse::add_option(pargs, c("--ref_groups"),
                               type="character",
-                              default=1,
+                              default=NULL,
                               action="store",
-                              dest="num_groups",
-                              metavar="Number_of_reference_groups",
-                              help=paste("Indicies of groups in which to group",
-                                         "the reference samples; or a number",
-                                         "of groups to make automatically",
-                                         "[Default %default]"))
+                              dest="name_ref_groups",
+                              metavar="Name_of_reference_groups",
+                              help=paste("Names of groups from --ref table whose cells",
+                                         "are to be used as reference groups.",
+                                         "[REQUIRED]"))
 
 pargs <- optparse::add_option(pargs, c("--ref_subtract_method"),
                               type="character",
@@ -423,6 +446,35 @@ pargs <- optparse::add_option(pargs, c("--save"),
                               metavar="save",
                               help="Save workspace as infercnv.Rdata")
 
+pargs <- optparse::add_option(pargs, c("--ngchm"),
+                              type="logical",
+                              action="store_true",
+                              default=FALSE,
+                              dest="ngchm",
+                              metavar="NextGen_HeatMap",
+                              help=paste("Create a Next Generation Clustered Heat Map"))
+
+pargs <- optparse::add_option(pargs, c("--path_to_shaidyMapGen"),
+                              type="character",
+                              action="store",
+                              default=NULL,
+                              dest="path_to_shaidyMapGen",
+                              metavar="Path_To_ShaidyMapGenp",
+                              help=paste("This is the pathway to the java application ShaidyMapGen.jar.",
+                                    "If this is not assigned, then an enviornmental variable that ",
+                                    "contains the "))
+
+pargs <- optparse::add_option(pargs, c("--gene_symbol"),
+                              type="character",
+                              action="store",
+                              default=NULL,
+                              dest="gene_symbol",
+                              metavar="Gene_Symbol",
+                              help=paste("The labeling type used to represent the genes in the expression",
+                                   "data. This needs to be passed in order to add linkouts to the ",
+                                   "genes. Possible gene label types to choose from are specified on",
+                                   "the broadinstitute/inferCNV wiki and bmbroom/NGCHM-config-biobase."))
+
 
 args_parsed <- optparse::parse_args(pargs, positional_arguments=2)
 args <- args_parsed$options
@@ -462,24 +514,24 @@ if (!is.na(args$log_file)){
 }
 
 # Log the input parameters
-logging::loginfo(paste("::Input arguments. Start.")) 
+logging::loginfo(paste("::Input arguments. Start."))
 for (arg_name in names(args)){
     logging::loginfo(paste(":Input_Argument:",arg_name,"=",args[[arg_name]],
-                           sep="")) 
+                           sep=""))
 }
-logging::loginfo(paste("::Input arguments. End.")) 
+logging::loginfo(paste("::Input arguments. End."))
 
 # Manage inputs
 logging::loginfo(paste("::Reading data matrix.", sep=""))
 # Row = Genes/Features, Col = Cells/Observations
-expression_data <- read.table(args$input_matrix, sep=args$delim, header=T, row.names=1)
+expression_data <- read.table(args$input_matrix, sep=args$delim, header=T, row.names=1, check.names=FALSE)
 logging::loginfo(paste("Original matrix dimensions (r,c)=",
                  paste(dim(expression_data), collapse=",")))
 
 # Read in the gen_pos file
 input_gene_order <- seq(1, nrow(expression_data), 1)
 if (args$gene_order != ""){
-    input_gene_order <- read.table(args$gene_order, header=F, row.names=1, sep="\t")
+    input_gene_order <- read.table(args$gene_order, header=FALSE, row.names=1, sep="\t")
     names(input_gene_order) <- c(CHR, START, STOP)
 }
 logging::loginfo(paste("::Reading gene order.", sep=""))
@@ -487,28 +539,48 @@ logging::logdebug(paste(head(args$gene_order[1]), collapse=","))
 
 # Default the reference samples to all
 input_reference_samples <- colnames(expression_data)
+observations_annotations_names = NULL
+
 if (!is.null(args$reference_observations)){
-    # This argument can be either a list of column labels
-    # which is a comma delimited list of column labels
-    # holding a comma delimited list of column labels
-    refs <- args$reference_observations
-    if (file.exists(args$reference_observations)){
-        refs <- scan(args$reference_observations,
-                     what="character",
-                     quiet=TRUE)
-        refs <- paste(refs, collapse=",")
+
+    ## replaces OLD args$num_groups
+    input_classifications <- read.table(args$reference_observations, header=FALSE, row.names=1, sep="\t", stringsAsFactors = FALSE)
+    # sort input classifications to same order as expression_data
+    input_classifications <- input_classifications[order(match(row.names(input_classifications), colnames(expression_data))), , drop=FALSE]
+
+    # make a list of list of positions that are going to be refs for each classification
+    name_ref_groups_indices <- list()
+    refs <- c()
+    for (name_group in args$name_ref_groups) {
+        name_ref_groups_indices[length(name_ref_groups_indices) + 1] <- list(which(input_classifications[,1] == name_group))
+        refs <- c(refs, row.names(input_classifications[which(input_classifications[,1] == name_group), , drop=FALSE]))
     }
-    # Split on comma
-    refs <- unique(unlist(strsplit(refs, ",", fixed=FALSE)))
-    # Remove multiple spaces to single spaces
-    refs <- unique(unlist(strsplit(refs, " ", fixed=FALSE)))
-    refs <- refs[refs != ""]
-    # Normalize names with make.names so they are treated
-    # as the matrix column names
-    refs <- make.names(refs)
-    if (length(refs) > 0){
-        input_reference_samples <- refs
-    }
+    input_reference_samples <- unique(refs)
+
+    all_annotations = unique(input_classifications[,1])
+    observations_annotations_names = setdiff(all_annotations, args$name_ref_groups)
+
+    # # This argument can be either a list of column labels
+    # # which is a comma delimited list of column labels
+    # # holding a comma delimited list of column labels
+    # refs <- args$reference_observations
+    # if (file.exists(args$reference_observations)){
+    #     refs <- scan(args$reference_observations,
+    #                  what="character",
+    #                  quiet=TRUE)
+    #     refs <- paste(refs, collapse=",")
+    # }
+    # # Split on comma
+    # refs <- unique(unlist(strsplit(refs, ",", fixed=FALSE)))
+    # # Remove multiple spaces to single spaces
+    # refs <- unique(unlist(strsplit(refs, " ", fixed=FALSE)))
+    # refs <- refs[refs != ""]
+    # # Normalize names with make.names so they are treated
+    # # as the matrix column names
+    # refs <- make.names(refs)
+    # if (length(refs) > 0){
+    #     input_reference_samples <- refs
+    # }
     logging::logdebug(paste("::Reference observations set to: ", input_reference_samples, collapse="\n"))
 }
 
@@ -538,10 +610,60 @@ if(is.null(expression_data)){
     stop(error_message)
 }
 
+obs_annotations_groups <- input_classifications[,1]
+counter <- 1
+for (classification in observations_annotations_names) {
+  obs_annotations_groups[which(obs_annotations_groups == classification)] <- counter
+  counter <- counter + 1
+}
+names(obs_annotations_groups) <- rownames(input_classifications)
+obs_annotations_groups <- obs_annotations_groups[input_classifications[,1] %in% observations_annotations_names]  # filter based on initial input in case some input annotations were numbers overlaping with new format
+obs_annotations_groups <- as.integer(obs_annotations_groups)
 
 if (args$save) {
     logging::loginfo("Saving workspace")
     save.image("infercnv.Rdata")
+}
+
+# Make sure the required java application ShaidyMapGen.jar exists. 
+if (args$ngchm){
+    ## if argument is passed, check if file exists
+    if (!is.null(args$path_to_shaidyMapGen)) {
+        if (!file.exists(args$path_to_shaidyMapGen)){
+            error_message <- paste("Cannot find the file ShaidyMapGen.jar using path_to_shaidyMapGen.", 
+                                   "Make sure the entire pathway is being used.")
+            logging::logerror(error_message)
+            stop(error_message)
+        } else {
+            shaidy.path <- unlist(strsplit(args$path_to_shaidyMapGen, split = .Platform$file.sep))
+            if (tail(shaidy.path, n = 1L) != "ShaidyMapGen.jar") {
+                stop("Check pathway to ShaidyMapGen: ", args$path_to_shaidyMapGen, 
+                     "\n Make sure to add 'ShaidyMapGen.jar' to the end of the path.")
+            }
+        }
+    } else { 
+        ## check if envionrmental variable is passed and check if file exists
+        if(exists("SHAIDYMAPGEN")) {
+            if (!file.exists(SHAIDYMAPGEN)){
+                error_message <- paste("Cannot find the file ShaidyMapGen.jar using SHAIDYMAPGEN.", 
+                                       "Make sure the entire pathway is being used.")
+                logging::logerror(error_message)
+                stop(error_message)
+            } else {
+                args$path_to_shaidyMapGen <- SHAIDYMAPGEN
+            }
+        }
+        if (Sys.getenv("SHAIDYMAPGEN") != "") {
+            if (!file.exists(Sys.getenv("SHAIDYMAPGEN"))){
+                error_message <- paste("Cannot find the file ShaidyMapGen.jar using SHAIDYMAPGEN.", 
+                                       "Make sure the entire pathway is being used.")
+                logging::logerror(error_message)
+                stop(error_message)
+            } else {
+                args$path_to_shaidyMapGen <- Sys.getenv("SHAIDYMAPGEN")
+            }
+        }
+    }    
 }
 
 # Run CNV inference
@@ -553,9 +675,11 @@ ret_list = infercnv::infer_cnv(data=expression_data,
                                window_length=args$window_length,
                                max_centered_threshold=args$max_centered_expression,
                                noise_threshold=args$magnitude_filter,
-                               num_ref_groups=args$num_groups,
+                               name_ref_groups=args$name_ref_groups,
+                               num_ref_groups=name_ref_groups_indices,
+                               obs_annotations_groups=obs_annotations_groups,
                                out_path=args$output_dir,
-                               k_obs_groups=args$num_obs,
+                               k_obs_groups=args$num_obs_groups,
                                plot_steps=args$plot_steps,
                                contig_tail=args$contig_tail,
                                method_bound_vis=args$bound_method_vis,
@@ -592,10 +716,11 @@ if (args$save) {
 if (args$plot_steps) {
     logging::loginfo("See results from each stage plotted separately")
 }  else {
-      
+
     infercnv::plot_cnv(plot_data=ret_list[["VIZ"]],
                        contigs=ret_list[["CONTIGS"]],
-                       k_obs_groups=args$num_obs,
+                       k_obs_groups=args$num_obs_groups,
+                       obs_annotations_groups=obs_annotations_groups,
                        reference_idx=ret_list[["REF_OBS_IDX"]],
                        ref_contig=args$clustering_contig,
                        contig_cex=args$contig_label_size,
@@ -606,6 +731,20 @@ if (args$plot_steps) {
                        title=args$fig_main,
                        obs_title=args$obs_main,
                        ref_title=args$ref_main)
-    
+
+}
+
+if (args$ngchm) {
+    logging::loginfo("Creating NGCHM as infercnv.ngchm")
+    infercnv::Create_NGCHM(plot_data = ret_list[["VIZ"]],
+                           path_to_shaidyMapGen = args$path_to_shaidyMapGen,
+                           reference_idx = ret_list[["REF_OBS_IDX"]],
+                           ref_index = name_ref_groups_indices,
+                           location_data = input_gene_order,
+                           out_dir = args$output_dir,
+                           contigs = ret_list[["CONTIGS"]],
+                           ref_groups = ret_list[["REF_GROUPS"]],
+                           title = args$fig_main,
+                           gene_symbol = ards$gene_symbol) 
 }
 

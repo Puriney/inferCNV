@@ -1,0 +1,300 @@
+---
+title: "infercnv_run"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(infercnv)
+
+```
+
+## Create the InferCNV Object
+
+Reading in the raw counts matrix and meta data, populating the infercnv object
+
+```{r}
+infercnv_obj = CreateInfercnvObject(
+  raw_counts_matrix="oligodendroglioma_expression_downsampled.counts.matrix",
+  annotations_file="oligodendroglioma_annotations_downsampled.txt",
+  delim="\t",
+  gene_order_file="gencode_downsampled.txt",
+  ref_group_names=c("Microglia/Macrophage","Oligodendrocytes (non-malignant)"))
+
+```
+
+
+## Filtering genes
+
+Removing those genes that are very lowly expressed or present in very few cells
+
+
+```{r}
+# filter out low expressed genes
+cutoff=1
+infercnv_obj <- require_above_min_mean_expr_cutoff(infercnv_obj, cutoff)
+
+# filter out bad cells
+min_cells_per_gene=3
+infercnv_obj <- require_above_min_cells_ref(infercnv_obj, min_cells_per_gene=min_cells_per_gene)
+
+## for safe keeping
+infercnv_orig_filtered = infercnv_obj
+#plot_mean_chr_expr_lineplot(infercnv_obj)
+save('infercnv_obj', file = 'infercnv_obj.orig_filtered')
+
+```
+
+
+## Normalize each cell's counts for sequencing depth
+
+Perform a total sum normalization. Generates counts-per-million or counts-per-100k, depending on the overall sequencing depth.
+
+```{r}
+infercnv_obj <- infercnv:::normalize_counts_by_seq_depth(infercnv_obj)
+```
+
+## Spike in artificial variation for tracking purposes
+
+Add ~0x and 2x variation to an artificial spike-in data set based on the normal cells so we can track and later scale residual expression data to this level of variation.
+
+
+```{r}
+infercnv_obj <- spike_in_variation_chrs(infercnv_obj)
+```
+
+## perform Anscombe normalization
+
+<<<<<<< HEAD
+Suggested for removing noisy variation at low counts
+=======
+Useful noise reduction method.  
+See: https://en.wikipedia.org/wiki/Anscombe_transform
+>>>>>>> 29a0b973d2701fe5ea2834efcd6a82dd542e0308
+
+```{r}
+infercnv_obj <- infercnv:::anscombe_transform(infercnv_obj)
+save('infercnv_obj', file='infercnv_obj.anscombe')
+```
+
+
+## log transform the normalized counts:
+
+```{r}
+infercnv_obj <- log2xplus1(infercnv_obj)
+save('infercnv_obj', file='infercnv_obj.log_transformed')
+```
+
+## Apply maximum bounds to the expression data to reduce outlier effects
+
+Here we define a threshold by taking the mean of the bounds of expression data across all cells. This is then use to define a cap for the bounds of all data.
+```{r}
+threshold = mean(abs(get_average_bounds(infercnv_obj))) 
+infercnv_obj <- apply_max_threshold_bounds(infercnv_obj, threshold=threshold)
+```
+
+## Initial view, before inferCNV operations:
+
+```{r, results="hide"}
+plot_cnv(infercnv_obj, 
+         output_filename='infercnv.logtransf', 
+         x.range="auto", 
+         title = "Before InferCNV (filtered & log2 transformed)", 
+         color_safe_pal = FALSE, 
+         x.center = mean(infercnv_obj@expr.data))
+```
+
+
+```{r}
+knitr::include_graphics("infercnv.logtransf.png")
+```
+
+
+
+## perform smoothing across chromosomes
+
+The expression values are 
+
+```{r}
+infercnv_obj = smooth_by_chromosome(infercnv_obj, window_length=101, smooth_ends=TRUE)
+save('infercnv_obj', file='infercnv_obj.smooth_by_chr')
+
+# re-center each cell
+infercnv_obj <- center_cell_expr_across_chromosome(infercnv_obj, method = "median")
+save('infercnv_obj', file='infercnv_obj.cells_recentered')
+
+```
+
+
+```{r, results='hide' }
+plot_cnv(infercnv_obj, 
+         output_filename='infercnv.chr_smoothed', 
+         x.range="auto", 
+         title = "chr smoothed and cells re-centered", 
+         color_safe_pal = FALSE)
+```
+
+
+```{r}
+knitr::include_graphics("infercnv.chr_smoothed.png")
+```
+
+
+
+# subtract the reference values from observations, now have log(fold change) values
+
+```{r}
+infercnv_obj <- subtract_ref_expr_from_obs(infercnv_obj, inv_log=TRUE)
+save('infercnv_obj', file='infercnv_obj.ref_subtracted')
+```
+
+```{r, results="hide"}
+plot_cnv(infercnv_obj, 
+         output_filename='infercnv.ref_subtracted', 
+         x.range="auto", 
+         title="ref subtracted", 
+         color_safe_pal = FALSE)
+```
+
+```{r}
+knitr::include_graphics("infercnv.ref_subtracted.png")
+```
+
+
+## invert log values
+
+Converting the log(FC) values to regular fold change values, centered at 1 (no fold change)
+
+This is important because we want (1/2)x to be symmetrical to 1.5x, representing loss/gain of one chromosome region.
+
+```{r}
+
+infercnv_obj <- invert_log2(infercnv_obj)
+save('infercnv_obj', file='infercnv_obj.inverted_log')
+```
+
+
+```{r, results="hide"}
+plot_cnv(infercnv_obj, 
+         output_filename='infercnv.inverted', 
+         color_safe_pal = FALSE, 
+         x.range="auto", 
+         x.center=1, 
+         title = "inverted log FC to FC")
+```
+
+
+```{r}
+knitr::include_graphics("infercnv.inverted.png")
+```
+
+
+## Removing noise
+
+```{r}
+infercnv_obj <- clear_noise_via_ref_mean_sd(infercnv_obj, sd_amplifier = 1.0)
+save('infercnv_obj', file='infercnv_obj.denoised')
+```
+
+
+```{r, results="hide"}
+plot_cnv(infercnv_obj, 
+         output_filename='infercnv.denoised', 
+         x.range="auto", 
+         x.center=1, 
+         title="denoised", 
+         color_safe_pal = FALSE)
+```
+
+```{r}
+knitr::include_graphics("infercnv.denoised.png")
+```
+
+## Remove outlier data points
+
+This generally improves on the visualization
+
+```{r}
+infercnv_obj = remove_outliers_norm(infercnv_obj)
+save('infercnv_obj', file="infercnv_obj.outliers_removed")
+```
+
+
+```{r, results="hide"}
+plot_cnv(infercnv_obj, 
+         output_filename='infercnv.outliers_removed', 
+         color_safe_pal = FALSE, 
+         x.range="auto", 
+         x.center=1, 
+         title = "outliers removed")
+```
+
+
+```{r}
+knitr::include_graphics("infercnv.outliers_removed.png")
+```
+
+
+## Scale residual expression values according to the Spike-in
+
+Perform rescaling of the data according to the spike-in w/ preset variation levels. Then, remove the spike-in data.
+```{r}
+# rescale
+infercnv_obj <- scale_cnv_by_spike(infercnv_obj)
+# remove the spike-in
+infercnv_obj <- remove_spike(infercnv_obj)
+```
+
+## Mask out those genes that are not signficantly different from the normal cells
+
+Runs a Wilcoxon rank test comparing tumor/normal for each patient and normal sample, and masks out those genes that are not significantly DE.
+
+infercnv_obj <- infercnv:::mask_non_DE_genes_basic(infercnv_obj, test.use = 't', center_val=1)
+
+save('infercnv_obj', file="infercnv_obj.non_DE_masked")
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+infercnv_obj <- infercnv:::mask_non_DE_genes_basic(infercnv_obj, center_val=1)
+
+```
+
+
+```{r, results="hide"}
+plot_cnv(infercnv_obj, 
+         output_filename='infercnv.non-DE-genes-masked', 
+         color_safe_pal = FALSE, 
+         x.range=c(0,2), # want 0-2 post scaling by the spike-in 
+         x.center=1, 
+         title = "non-DE-genes-masked")
+```
+
+
+```{r}
+knitr::include_graphics("infercnv.non-DE-genes-masked.png")
+
+```
+
+## Brighten it up by changing the scale threshold to our liking:
+
+```{r}
+
+plot_cnv(infercnv_obj, 
+         output_filename='infercnv.finalized_view', 
+         color_safe_pal = FALSE, 
+         x.range=c(0.7, 1.3), 
+         x.center=1, 
+         title = "InferCNV")
+
+```
+
+```{r}
+knitr::include_graphics("infercnv.finalized_view.png")
+```
+
+And that's it. You can experiment with each step to fine-tune your data exploration.  See the documentation for uploading the resulting data matrix into the Next Generation Clustered Heatmap Viewer for more interactive exploration of the infercnv-processed data:
+<https://github.com/broadinstitute/inferCNV/wiki/Next-Generation-Clustered-Heat-Map>
+
+
+

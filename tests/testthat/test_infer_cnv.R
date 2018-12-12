@@ -1,15 +1,54 @@
 # Global data
+
+make_fake_infercnv_obj <- function(some_matrix) {
+
+    num_cells = ncol(some_matrix)
+    num_genes = nrow(some_matrix)
+
+    if (num_cells < 2) {
+        stop("Error, need at least 2 cells in the matrix")
+    }
+    
+    gene_order <- data.frame(chr=rep("chr1", num_genes),
+                             start=1:num_genes,
+                             stop=1:num_genes)
+    
+    midpt_cells = floor(num_cells/2)
+    
+    normal_cells = 1:midpt_cells
+    tumor_cells = (midpt_cells+1):num_cells
+
+    infercnv_obj <- new(
+        Class = "infercnv",
+        expr.data = some_matrix, 
+        count.data = some_matrix,
+        gene_order = gene_order,
+        reference_grouped_cell_indices = list(normal=normal_cells),
+        observation_grouped_cell_indices = list(tumor=tumor_cells) )
+
+    return(infercnv_obj)
+
+}
+
+
 matrix_zeros <- matrix(rep(0,5), ncol=1)
+
 matrix_one <- matrix(1:5, ncol=1)
+
 matrix_one_long <- matrix(1:20, ncol=1)
+
 matrix_one_long_2 <- matrix(c(1,2,4,7,9,11,12,14,17,19,16,14,
                               13,11,10,7,6,4,3,1), ncol=1)
 matrix_two <- matrix(1:10, ncol=2)
+
 matrix_two_long <- matrix(1:40, ncol=2)
+
 matrix_two_long_2 <- matrix(c(1,2,4,7,9,11,12,14,17,19,16,14,13,11,10,7,6,4,3,
                               1,1,2,4,7,9,11,12,14,17,19,16,14,13,11,10,7,6,4,
                               3,1), ncol=2)
+
 matrix_three <- matrix(1:15, ncol=3)
+
 matrix_five <- matrix(1:25, ncol=5)
 
 context("Test subtract_ref")
@@ -40,148 +79,42 @@ matrix_averef_five_answer <- matrix(c(c(-1,0,0,0,0,-1,0,0,1,0),
                                     byrow=TRUE)
 
 test_that("subtract_ref works with one observation, one reference",{
-    expect_equal(subtract_ref(average_data=t(matrix_one),
-                                  ref_observations=c(1),
-                                  ref_groups=list(c(1))),
+    expect_equal(infercnv:::.subtract_expr(t(matrix_one),
+                              ref_groups=list(c(1))),
                  t(avref_answer_1))
           })
 test_that("subtract_ref works with two observations, one reference",{
-    expect_equal(subtract_ref(average_data=t(matrix_two),
-                                  ref_observations=c(1),
-                                  ref_groups=list(c(1))),
+    expect_equal(infercnv:::.subtract_expr(t(matrix_two),
+                                           ref_groups=list(c(1))),
                  t(avref_answer_2))
           })
-test_that("subtract_ref works with 3 observations, two reference",{
-    expect_equal(subtract_ref(average_data=t(matrix_three),
-                                  ref_observations=c(1,3),
-                                  ref_groups=list(c(1,2))),
+
+test_that("subtract_ref updated works with 3 observaions, two reference",{
+    expect_equal(infercnv:::.subtract_expr(t(matrix_three),
+                                           ref_groups=list(c(1,3))),
                  t(avref_answer_3))
-          })
+    })
 test_that("subtract_ref works with 5 observations, two reference",{
-    expect_equal(subtract_ref(average_data=t(matrix_five),
-                                  ref_observations=c(2,5),
-                                  ref_groups=list(c(1,2))),
+    expect_equal(infercnv:::.subtract_expr(t(matrix_five),
+                                   ref_groups=list(c(2,5))),
                  t(avref_answer_4))
           })
 test_that("subtract_ref works with 1 observation, 1 reference",{
-    expect_equal(subtract_ref(average_data=t(matrix_zeros),
-                                  ref_observations=c(1),
-                                  ref_groups=list(c(1))),
+    expect_equal(infercnv:::.subtract_expr(t(matrix_zeros),
+                                           ref_groups=list(c(1))),
                  t(avref_answer_5))
-          })
+})
+
 test_that("subtract_ref works with 10 obs, 5 references, 3 groups",{
-    expect_equal(subtract_ref(average_data=t(matrix_averef_five),
-                                  ref_observations=c(2,4,6,8,10),
-                                  ref_groups=list(c(1),c(2,3,4),c(5))),
+    expect_equal(infercnv:::.subtract_expr(t(matrix_averef_five),
+                                           ref_groups=list(c(2),c(4,6,8),c(10))),
                  matrix_averef_five_answer)
           })
 
 
-context("Test split_references")
-
-split_matrix_one <- NULL
-split_matrix_two <- matrix(1:10, ncol=1)
-split_matrix_three <- matrix(1:10, ncol=1)
-split_matrix_four <- matrix(c(1:10,2:11,31:40,32:41,33:42,0:9),
-                            ncol=10, byrow=TRUE)
-split_matrix_five <- matrix(c(1:10,2:11,31:40,32:41,33:42,0:9),
-                            ncol=10, byrow=TRUE)
-
-split_obs_one <- NULL
-split_obs_two <- c(1)
-split_obs_three <- c(2)
-split_obs_four <- 1:3
-split_obs_five <- c(2,4,6)
-
-split_num_grp_one <- NULL
-split_num_grp_two <- 1
-split_num_grp_three <- 2
-split_num_grp_four <- 1
-split_num_grp_five <- 3
-
-split_answer_one <- list()
-split_answer_two <- list()
-split_answer_two[[1]] <- split_obs_two
-split_answer_three <- list()
-split_answer_three[[1]] <- split_obs_three
-split_answer_four <- list()
-split_answer_four[[1]] <- split_obs_four
-split_answer_five <- list()
-split_answer_five[[1]] <- c(1)
-split_answer_five[[2]] <- c(2)
-split_answer_five[[3]] <- c(3)
-
-test_that("split_references for null matrix.",{
-    expect_equal(split_references(average_data=split_matrix_one,
-                                  ref_obs=split_obs_one,
-                                  num_groups=split_num_grp_one),
-                 split_answer_one)
-        })
-
-test_that("split_references for one observation matrix, one group",{
-    expect_equal(split_references(average_data=split_matrix_two,
-                                  ref_obs=split_obs_two,
-                                  num_groups=split_num_grp_two),
-                split_answer_two)
-        })
-
-test_that("split_references for one observation matrix, two groups",{
-    expect_equal(split_references(average_data=split_matrix_three,
-                                  ref_obs=split_obs_three,
-                                  num_groups=split_num_grp_three),
-                split_answer_three)
-        })
-
-test_that("split_references for three observation matrix, one group",{
-    expect_equal(split_references(average_data=split_matrix_four,
-                                  ref_obs=split_obs_four,
-                                  num_groups=split_num_grp_four),
-                split_answer_four)
-        })
-
-test_that("split_references for three observation matrix, three groups",{
-    expect_equal(split_references(average_data=split_matrix_five,
-                                  ref_obs=split_obs_five,
-                                  num_groups=split_num_grp_five),
-                split_answer_five)
-        })
 
 
-context("Test center_with_threshold")
-
-center_answer_1 <- matrix(rep(0,5), ncol=1)
-center_answer_2 <- matrix(c(rep(-5,5),rep(0,5),rep(5,5)), ncol=3)
-center_answer_3 <- matrix(c(rep(-6,5),rep(-5,5),rep(0,5),
-                            rep(5,5),rep(6,5)), ncol=5)
-center_answer_4 <- matrix(rep(0,25), ncol=5)
-
-test_that(paste("center_with_threshold works with one observation,",
-                "threshold too large to affect"),{
-    expect_equal(center_with_threshold(center_data=matrix_one,
-                                       threshold=100),
-                 center_answer_1)
-          })
-test_that(paste("center_with_threshold works with three observations,",
-                "threshold too large to affect"),{
-    expect_equal(center_with_threshold(center_data=matrix_three,
-                                       threshold=100),
-                 center_answer_2)
-          })
-test_that(paste("center_with_threshold works with five observations,",
-                "threshold affecting some"),{
-    expect_equal(center_with_threshold(center_data=matrix_five,
-                                       threshold=6),
-                 center_answer_3)
-         })
-test_that(paste("center_with_threshold works with one observation,",
-                "threshold of 0, affecting all"),{
-    expect_equal(center_with_threshold(center_data=matrix_five,
-                                       threshold=0),
-                 center_answer_4)
-         })
-
-
-context("Test center_smoothed")
+context("Test center_columns")
 
 center_sm_1 <- matrix(1:10, ncol=1)
 center_sm_1_answer <- matrix(c(-4.5,-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5,3.5,4.5),
@@ -189,65 +122,65 @@ center_sm_1_answer <- matrix(c(-4.5,-3.5,-2.5,-1.5,-0.5,0.5,1.5,2.5,3.5,4.5),
 center_sm_3 <- matrix(1:21, ncol=3)
 center_sm_3_answer <- matrix(rep(c(-3,-2,-1,0,1,2,3),3), ncol=3)
 
-test_that("center_smoothed works with 1 observations",{
-    expect_equal(center_smoothed(data_smoothed=center_sm_3),
+test_that("center_columns works with 1 observations",{
+    expect_equal(infercnv:::.center_columns(expr_data=center_sm_3, method="mean"),
                  center_sm_3_answer)
     })
 
 test_that("center_smoothed works with 3 observations",{
-    expect_equal(center_smoothed(data_smoothed=center_sm_3),
+    expect_equal(infercnv:::.center_columns(center_sm_3, method="mean"),
                  center_sm_3_answer)
     })
 
 
-context("Test above_cutoff")
+context("Test below_min_mean_expr_cutoff")
 
-above_answer_1 <- 1:5
-above_answer_2 <- 1:5
-above_answer_3 <- 4:5
-above_answer_4 <- c(5)
-above_answer_5 <- NULL
-above_answer_6 <- NULL
+below_answer_1 <- 1:5
+below_answer_2 <- 1:4
+below_answer_3 <- c(1)
+below_answer_4 <- 1:3
+below_answer_5 <- integer(0)
+below_answer_6 <- 1:5
 
-test_that(paste("above_cutoff works with one observation,",
+test_that(paste("below_min_mean_expr_cutoff works with one observation,",
                 "cutoff too large to affect"),{
-    expect_equal(above_cutoff(data=log2(matrix_one + 1),
-                              cutoff=0),
-                 above_answer_1)
-         })
-test_that(paste("above_cutoff works with three observations,",
+                    expect_equal(infercnv:::.below_min_mean_expr_cutoff(expr_data=matrix_one,
+                                                                        min_mean_expr=10),
+                                 below_answer_1)
+                })
+test_that(paste("below_min_mean_expr_cutoff works with three observations,",
                 "threshold too large to affect"),{
-    expect_equal(above_cutoff(data=log2(matrix_three + 1),
-                              cutoff=0),
-                 above_answer_2)
-         })
-test_that(paste("above_cutoff works with one observation,",
+                    expect_equal(infercnv:::.below_min_mean_expr_cutoff(expr_data=matrix_three,
+                                                                        min_mean_expr=10),
+                                 below_answer_2)
+                })
+test_that(paste("below_min_mean_expr_cutoff works with one observation,",
                 "threshold excluding two."),{
-    expect_equal(above_cutoff(data=log2(matrix_one + 1),
-                              cutoff=2),
-                 above_answer_3)
-         })
-test_that(paste("above_cutoff works with three observations,",
+                    expect_equal(infercnv:::.below_min_mean_expr_cutoff(expr_data=matrix_one,
+                                                                        min_mean_expr=2),
+                                 below_answer_3)
+                })
+test_that(paste("below_min_mean_expr_cutoff works with three observations,",
                 "threshold excluding three."),{
-    expect_equal(above_cutoff(data=log2(matrix_three + 1),
-                              cutoff=3.4),
-                 above_answer_4)
-         })
-test_that(paste("above_cutoff works with one observation,",
+                    expect_equal(infercnv:::.below_min_mean_expr_cutoff(expr_data=matrix_three,
+                                                                        min_mean_expr=8.4),
+                                 below_answer_4)
+                })
+test_that(paste("above_min_mean_expr_cutoff works with one observation,",
+                "threshold including all."),{
+                    expect_equal(infercnv:::.below_min_mean_expr_cutoff(expr_data=matrix_one,
+                                                            min_mean_expr=0),
+                                 below_answer_5)
+                })
+test_that(paste("above_min_mean_expr_cutoff works with three observations,",
                 "threshold excluding all."),{
-    expect_equal(above_cutoff(data=log2(matrix_one + 1),
-                              cutoff=100),
-                 above_answer_5)
-         })
-test_that(paste("above_cutoff works with three observations,",
-                "threshold excluding all."),{
-    expect_equal(above_cutoff(data=log2(matrix_three + 1),
-                              cutoff=100),
-                 above_answer_6)
-         })
+                    expect_equal(infercnv:::.below_min_mean_expr_cutoff(expr_data=matrix_three,
+                                                            min_mean_expr=100),
+                                 below_answer_6)
+                })
 
 
-context("Test remove_noise")
+context("Test clear_noise")
 
 noise_answer_1 <- matrix_one
 noise_answer_2 <- matrix(c(0,0,0,4,5), ncol=1)
@@ -257,122 +190,136 @@ noise_answer_5 <- matrix(c(rep(0,11),12:15), ncol=3)
 noise_answer_6 <- matrix(rep(0,15), ncol=3)
 
 test_that("remove_noise works with one observation, threshold 0",{
-    expect_equal(remove_noise(smooth_matrix=matrix_one,
-                              threshold=0),
-                  noise_answer_1)
-         })
+    expect_equal(infercnv:::.clear_noise(expr_data=matrix_one,
+                                         threshold=0),
+                 noise_answer_1)
+})
 test_that(paste("remove_noise works with one observation, one ref,",
                 "threshold removing some"),{
-    expect_equal(remove_noise(smooth_matrix=matrix_one,
-                              threshold=4),
-                  noise_answer_2)
-         })
+                    expect_equal(infercnv:::.clear_noise(expr_data=matrix_one,
+                                                         threshold=4),
+                                 noise_answer_2)
+                })
 test_that(paste("remove_noise works with one observation,",
                 "threshold removing all"),{
-    expect_equal(remove_noise(smooth_matrix=matrix_one,
-                              threshold=6),
-                  noise_answer_3)
-         })
+                    expect_equal(infercnv:::.clear_noise(expr_data=matrix_one,
+                                                         threshold=6),
+                                 noise_answer_3)
+                })
 test_that("remove_noise works with three observation, threshold 0",{
-    expect_equal(remove_noise(smooth_matrix=matrix_three,
-                              threshold=0),
-                  noise_answer_4)
-         })
+    expect_equal(infercnv:::.clear_noise(expr_data=matrix_three,
+                                         threshold=0),
+                 noise_answer_4)
+})
 test_that("remove_noise works with three observation, threshold some",{
-    expect_equal(remove_noise(smooth_matrix=matrix_three,
-                              threshold=12),
-                  noise_answer_5)
-         })
+    expect_equal(infercnv:::.clear_noise(expr_data=matrix_three,
+                                         threshold=12),
+                 noise_answer_5)
+})
 test_that("remove_noise works with three observation, threshold all",{
-    expect_equal(remove_noise(smooth_matrix=matrix_three,
-                              threshold=100),
-                  noise_answer_6)
-         })
+    expect_equal(infercnv:::.clear_noise(expr_data=matrix_three,
+                                         threshold=100),
+                 noise_answer_6)
+})
 
 
 context("Test remove_tails")
 
 tail_answer_1 <- c()
-tail_answer_2 <- -1 * c(1:5, 16:20)
-tail_answer_3 <- -1 * c(2:6, 13:17)
-tail_answer_4 <- -1 * c(5:9, 11:15)
-tail_answer_5 <- -1 * c(1, 5)
+tail_answer_2 <- c(1:5, 16:20)
+tail_answer_3 <- c(2:6, 13:17)
+tail_answer_4 <- c(5:9, 11:15)
+tail_answer_5 <- c(1, 5)
 
 test_that(paste("remove tails works with one contig,",
                 "one observation, no tail length"),{
-    expect_equal(remove_tails(smooth_matrix=matrix_one,
-                              chr=1:length(matrix_one),
-                              tail_length=0),
+    expect_equal(infercnv:::.remove_tails(smooth_matrix=matrix_one,
+                                          chr=1:length(matrix_one),
+                                          tail_length=0),
                  tail_answer_1)
-         })
+                })
 test_that("remove tails works with one contig, one observation, tail length 5",{
-    expect_equal(remove_tails(smooth_matrix=matrix_one_long,
-                              chr=1:length(matrix_one_long),
-                              tail_length=5),
+    expect_equal(infercnv:::.remove_tails(smooth_matrix=matrix_one_long,
+                                          chr=1:length(matrix_one_long),
+                                          tail_length=5),
                  tail_answer_2)
-         })
+})
 test_that("remove tails works with 3 contig, one observation, tail length 5",{
-    expect_equal(remove_tails(smooth_matrix=matrix_one_long,
-                              chr=2:17,
-                              tail_length=5),
+    expect_equal(infercnv:::.remove_tails(smooth_matrix=matrix_one_long,
+                                          chr=2:17,
+                                          tail_length=5),
                  tail_answer_3)
-         })
+})
 test_that("remove tails works with 3 contig, two observations, tail length 5",{
-    expect_equal(remove_tails(smooth_matrix=matrix_two_long,
-                              chr=5:15,
-                              tail_length=5),
+    expect_equal(infercnv:::.remove_tails(smooth_matrix=matrix_two_long,
+                                          chr=5:15,
+                                          tail_length=5),
                  tail_answer_4)
-         })
+})
 test_that(paste("remove tails works with one contig, one observation,",
                 "tail length longer than contig"),{
-    expect_equal(remove_tails(smooth_matrix=matrix_one,
-                              chr=1:length(matrix_one),
-                              tail_length=100),
-                 tail_answer_5)
-         })
+                    expect_equal(infercnv:::.remove_tails(smooth_matrix=matrix_one,
+                                                          chr=1:length(matrix_one),
+                                                          tail_length=100),
+                                 tail_answer_5)
+                })
 
 
 context("smooth_window")
 
 smooth_answer_1 <- matrix_one
+
 smooth_answer_2 <- matrix_one
-smooth_answer_3 <- matrix(c(1.00,2.33,4.60,6.60,8.60,10.60,12.60,14.60,
-                            15.60,16.00,15.80,14.60,12.80,11.00,9.40,
-                            7.60,6.00,4.20,2.67,1.00), ncol=1)
-smooth_answer_4 <- matrix(c(1.00,2.33,4.60,6.60,8.60,10.60,12.60,14.60,
-                            15.60,16.00,15.80,14.60,12.80,11.00,9.40,
-                            7.60,6.00,4.20,2.67,1.00,1.00,2.33,4.60,
-                            6.60,8.60,10.60,12.60,14.60,
-                            15.60,16.00,15.80,14.60,12.80,11.00,9.40,
-                            7.60,6.00,4.20,2.67,1.00), ncol=2)
-smooth_answer_5 <- matrix_one
+
+# smooth_answer_3 <- matrix(c(1.00,2.53,4.60,6.60,8.60,10.60,12.60,14.60,
+#                            15.60,16.00,15.80,14.60,12.80,11.00,9.40,
+#                            7.60,6.00,4.20,2.73,1.00), ncol=1)
+smooth_answer_3 <- matrix(c(2.88, 4.44, 6.67, 8.78, 10.67, 12.44, 14.44, 16.11, 16.78, 16, 14.44, 12.78, 11.11, 9.44, 7.56, 5.89, 4.22, 3.13, 2.17), ncol=1)
+
+
+#smooth_answer_4 <- matrix(c(1.00,2.53,4.60,6.60,8.60,10.60,12.60,14.60,
+#                            15.60,16.00,15.80,14.60,12.80,11.00,9.40,
+#                            7.60,6.00,4.20,2.73,1.00,
+#                            1.00,2.53,4.60,
+#                            6.60,8.60,10.60,12.60,14.60,
+#                            15.60,16.00,15.80,14.60,12.80,11.00,9.40,
+#                            7.60,6.00,4.20,2.73,1.00), ncol=2)
+
+smooth_answer_4 <- matrix(c(2.88, 4.44, 6.67, 8.78, 10.67, 12.44, 14.44, 16.11, 16.78, 16, 14.44, 12.78, 11.11, 9.44, 7.56, 5.89, 4.22, 3.13, 2.17, 2.88, 4.44, 6.67, 8.78, 10.67, 12.44, 14.44, 16.11, 16.78, 16, 14.44, 12.78, 11.11, 9.44, 7.56, 5.89, 4.22, 3.13, 2.17), ncol=2)
+
+smooth_answer_5 <- matrix(c(1.67, 2.25, 3, 3.75, 4.33), ncol=1)
 
 test_that("smooth_window works with one observation, window_length 0",{
-    expect_equal(smooth_window(data=matrix_one,
-                               window_length=0),
+    expect_equal(infercnv:::.smooth_window(data=matrix_one,
+                                           window_length=0),
                  smooth_answer_1)
          })
+
 test_that("smooth_window works with one observation, window_length 1",{
-    expect_equal(smooth_window(data=matrix_one,
-                               window_length=1),
+    expect_equal(infercnv:::.smooth_window(data=matrix_one,
+                                           window_length=1),
                  smooth_answer_2)
-         })
-test_that("smooth_window works with one observation, window_length 5",{
-    expect_equal(round(smooth_window(data=matrix_one_long_2,
-                                     window_length=5),2),
-                 smooth_answer_3)
-         })
-test_that("smooth_window works with two observations, window_length 5",{
-    expect_equal(round(smooth_window(data=matrix_two_long_2,
-                                     window_length=5),2),
-                 smooth_answer_4)
-         })
+})
+
+test_that("smooth_window works with one observation, window_length 5", {isTRUE(all.equal(
+                                           infercnv:::.smooth_window(data=matrix_one_long_2,
+                                           window_length=5),
+                                           smooth_answer_3))
+})
+
+test_that("smooth_window works with two observations, window_length 5",{isTRUE(all.equal(
+                                                 infercnv:::.smooth_window(data=matrix_two_long_2,
+                                                 window_length=5),
+                                                 smooth_answer_4))
+})
+
 test_that(paste("smooth_window works with one observation,",
                 "window_length longer than measurements"),{
-    expect_equal(smooth_window(data=matrix_one,
-                               window_length=100),
-                 smooth_answer_5)
-         })
+                    isTRUE(all.equal(infercnv:::.smooth_window(data=matrix_one,
+                                                               window_length=100),
+                                                               smooth_answer_5))
+})
+
 
 context("create_sep_list")
 create_sep_list_answer_1 <- list()
@@ -426,132 +373,26 @@ remove_outlier_norm_out_2 <- matrix(c(1:15,
                                     c(-.5,-.5,3:13,17.75,17.75),
                                     1:15,
                                     1:15), ncol=4)
-test_that("remove_outliers_norm for bad data",{
-    expect_equal(remove_outliers_norm( NA ),
-                  NA)
-})
-test_that("remove_outliers_norm for no change",{
-    expect_equal(remove_outliers_norm( remove_outlier_norm_in_1 ),
-                 remove_outlier_norm_in_1)
-})
+
 test_that("remove_outliers_norm for hard threshold outside of values",{
-    expect_equal(remove_outliers_norm(remove_outlier_norm_in_1,
-                                      lower_bound=-1,
-                                      upper_bound=30),
+    expect_equal(infercnv:::.remove_outliers_norm(remove_outlier_norm_in_1,
+                                                      lower_bound=-1,
+                                                      upper_bound=30),
                  remove_outlier_norm_in_1)
 })
 test_that("remove_outliers_norm for hard threshold within values",{
-    expect_equal(remove_outliers_norm(remove_outlier_norm_in_1,
-                                      lower_bound=5,
-                                      upper_bound=15),
+    expect_equal(infercnv:::.remove_outliers_norm(remove_outlier_norm_in_1,
+                                                      lower_bound=5,
+                                                      upper_bound=15),
                  remove_outlier_norm_out_1)
 
 })
 test_that("remove_outliers_norm for average bound",{
-    expect_equal(remove_outliers_norm(remove_outlier_norm_in_2,
-                                      out_method="average_bound"),
+    expect_equal(infercnv:::.remove_outliers_norm(remove_outlier_norm_in_2,
+                                                      out_method="average_bound"),
                  remove_outlier_norm_out_2)
 })
 
-context("plot_cnv_observations")
-obs_data <- matrix(1:20, ncol=4)
-row.names(obs_data) <- paste("gene",1:5, sep="_")
-colnames(obs_data) <- paste("Sample",1:4,sep="_")
-obs_file_base_name <- "."
-obs_contig_colors <- c("red","red","cyan","yellow","yellow")
-names(obs_contig_colors) <- c(1,1,2,3,3)
-obs_contig_label <- c("1","","2","3","") 
-obs_contig_name <- c("1","1","2","2","3")
-obs_col_pal <- rainbow
-obs_contig_seps <- c(2,3)
-obs_groups <- 2
-names(obs_contig_seps) <- c(4,6)
-obs_plot=FALSE
-obs_answer_1 <-obs_data[c("gene_1","gene_2","gene_5","gene_3","gene_4"),]
-obs_answer_3 <-obs_data[c("gene_1","gene_2"),]
-obs_answer_4 <-obs_data[c("gene_3","gene_4","gene_5"),]
-test_plot_cnv_file <- function(obs_data,
-                              obs_col_pal,
-                              obs_contig_seps,
-                              obs_file_base_name,
-                              obs_file){
-                                  plot_cnv_observations(obs_data=obs_data,
-                                                        file_base_name=obs_file_base_name,
-                                                        contig_colors=obs_contig_colors,
-                                                        contig_label=obs_contig_label,
-                                                        contig_names=obs_contig_name,
-                                                        col_pal=obs_col_pal,
-                                                        contig_seps=obs_contig_seps,
-                                                        num_obs_groups=obs_groups,
-                                                        testing=!obs_plot);
-                                  return(as.matrix(read.table(file.path(obs_file_base_name,obs_file),
-                                                   row.names=1)))}
-
-# TODO, turn on. The is creates a file, turned off normally as a result.
-#test_that("plot_cnv_observations test for accurate output of observation file.",{
-#    expect_equal(test_plot_cnv_file(obs_data=obs_data,
-#                                   obs_col_pal=obs_col_pal,
-#                                   obs_contig_seps=obs_contig_seps,
-#                                   obs_file_base_name=obs_file_base_name,
-#                                   obs_file="observations.txt"),
-#                 obs_answer_1)
-#})
-
-# TODO, turn on. The is creates a file, turned off normally as a result.
-#test_that("plot_cnv_observations test for accurate output of obs group 1 file.",{
-#    expect_equal(test_plot_cnv_file(obs_data=obs_data,
-#                                       obs_col_pal=obs_col_pal,
-#                                       obs_contig_seps=obs_contig_seps,
-#                                       obs_file_base_name=obs_file_base_name,
-#                                       obs_file="General_HCL_1_members.txt"),
-#                 obs_answer_3)
-#})
-
-# TODO, turn on. The is creates a file, turned off normally as a result.
-#test_that("plot_cnv_observations test for accurate output of obs group 2 file.",{
-#    expect_equal(test_plot_cnv_file(obs_data=obs_data,
-#                                       obs_col_pal=obs_col_pal,
-#                                       obs_contig_seps=obs_contig_seps,
-#                                       obs_file_base_name=obs_file_base_name,
-#                                       obs_file="General_HCL_2_members.txt"),
-#                 obs_answer_4)
-#})
-
-context("plot_cnv_references")
-references_ref_data <- matrix(1:20, ncol=4)
-row.names(references_ref_data) <- paste("gene",1:5, sep="_")
-colnames(references_ref_data) <- paste("Sample",1:4,sep="_")
-references_ref_groups <- list()
-references_ref_groups[[1]] <- c(3)
-references_ref_groups[[1]] <- c(1,2,4)
-references_col_pal <- rainbow
-references_contig_seps <- c(2,3)
-names(references_contig_seps) <- c(4,6)
-references_file_base_name <- "."
-ref_plot=FALSE
-test_plot_cnv_references <- function(references_ref_data,
-                                     references_ref_groups,
-                                     references_col_pal,
-                                     references_contig_seps,
-                                     references_file_base_name){
-                                         plot_cnv_references(ref_data=references_ref_data,
-                                             ref_groups=references_ref_groups,
-                                             col_pal=references_col_pal,
-                                             contig_seps=references_contig_seps,
-                                             file_base_name=references_file_base_name,
-                                             testing=!ref_plot);
-                                         return(as.matrix(read.table(file.path(references_file_base_name,"references.txt"),
-                                                           row.names=1)))}
-
-# TODO, turn on. The is creates a file, turned off normally as a result.
-#test_that("plot_cnv_references test for accurate output reference file.",{
-#    expect_equal(test_plot_cnv_references(references_ref_data=references_ref_data,
-#                          references_ref_groups=references_ref_groups,
-#                          references_col_pal=references_col_pal,
-#                          references_contig_seps=references_contig_seps,
-#                          references_file_base_name=references_file_base_name),
-#                 references_ref_data[,ncol(references_ref_data):1])
-#})
 
 context("order_reduce")
 order_reduce_data_1 <- matrix(rep(1:10,2), ncol=2)
@@ -583,23 +424,23 @@ order_reduce_pos_3 <- data.frame(chr=c(1,1,2,3,4,4),
 row.names(order_reduce_pos_3) <- paste("GENE",c(10,5,3,9,1,7),sep="_")
 
 test_that("order_reduce for NULL input.",{
-    expect_equal(order_reduce(NULL,NULL),
+    expect_equal(infercnv:::.order_reduce(NULL,NULL),
                  list(expr=NULL,order=NULL,chr_order=NULL))
 })
 test_that("order_reduce for happy path",{
-    expect_equal(order_reduce(order_reduce_data_1, order_reduce_pos_1),
+    expect_equal(infercnv:::.order_reduce(order_reduce_data_1, order_reduce_pos_1),
                  list(expr=order_reduce_exp_1,
                       order=order_reduce_pos_1,
                       chr_order=order_reduce_chr_1))
 })
 test_that("order_reduce for happy path but dropping genes",{
-    expect_equal(order_reduce(order_reduce_data_1, order_reduce_pos_2),
+    expect_equal(infercnv:::.order_reduce(order_reduce_data_1, order_reduce_pos_2),
                  list(expr=order_reduce_exp_2,
                       order=order_reduce_pos_2,
                       chr_order=order_reduce_chr_2))
 })
 test_that("order_reduce for no matching gene names",{
-    expect_equal(order_reduce(order_reduce_data_1, order_reduce_pos_3),
+    expect_equal(infercnv:::.order_reduce(order_reduce_data_1, order_reduce_pos_3),
                  list(expr=NULL,
                       order=NULL,
                       chr_order=NULL))

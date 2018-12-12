@@ -1,26 +1,27 @@
 Package: infercnv
-Type: Source
+Type: Package
 Title: Infer Copy Number Variation from Single-Cell RNA-Seq Data
-Version: 0.1
-Date: 2017-05-25
-Authors@R: c( 
-    person("Timothy", "Tickle", email = "ttickle@broadinstitute.org", role = "aut"),
-    person("Timothy", "Tickle", email = "ttickle@broadinstitute.org", role = "cre"),
-    person("Itay", "Tirosh", email = "tirosh@broadinstitute.org", role = "aut"),
-    person("Brian", "Haas", email = "bhaas@broadinstitute.org", role = "aut"))
+Version: 0.8.2
+Date: 2018-11-08
+Authors@R: c( person("Timothy", "Tickle", email = "ttickle@broadinstitute.org", role = c("aut", "cre")), person("Itay", "Tirosh", email = "tirosh@broadinstitute.org", role = "aut"), person("Christophe", "Georgescu", email = "cgeorges@broadinstitute.org", role = "aut"), person("Maxwell", "Brown", email = "mbrown@broadinstitute.org", role = "aut"), person("Brian", "Haas", email = "bhaas@broadinstitute.org", role = "aut")) 
+Author: Timothy Tickle [aut, cre], Itay Tirosh [aut], Christophe Georgescu [aut], Maxwell Brown [aut], Brian Haas [aut]
+Maintainer: Christophe Georgescu <cgeorges@broadinstitute.org>
+BugReports: https://github.com/broadinstitute/inferCNV/issues
 Description: Using single-cell RNA-Seq expression to visualize CNV in cells.
-Depends:
-    R(>= 3.2.1)
-License: BSD-3 clause
+Depends: R(>= 3.2.1)
+License: BSD_3_clause + file LICENSE
 LazyData: TRUE
-Suggests:
-    knitr,
-    testthat,
-    rmarkdown
 VignetteBuilder: knitr
-RoxygenNote: 6.0.1
-Imports:
-    RColorBrewer,
-    gplots,
-    optparse,
-    logging
+Suggests: BiocStyle, knitr, rmarkdown, testthat
+Enhances: NGCHM
+RoxygenNote: 6.1.0
+NeedsCompilation: no
+Imports: RColorBrewer, gplots, futile.logger, stats, utils, methods, ape, Matrix, binhf, fastcluster, dplyr, coin
+Collate: 
+    'NextGenHeatMap.R'
+    'inferCNV.R'
+    'inferCNV_constants.R'
+    'inferCNV_heatmap.R'
+    'inferCNV_mask_non_DE.R'
+    'inferCNV_ops.R'
+    'inferCNV_spike.R'
